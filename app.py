@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import ping3
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 
 app = Flask(__name__)
 
@@ -13,14 +14,9 @@ def log_ping_result(ip, status, rtt):
     conn.commit()
     conn.close()
 
-@app.route('/log', methods=['GET'])
-def get_log():
-    conn = sqlite3.connect('ping_log.db')
-    c = conn.cursor()
-    c.execute("Select * FROM logs")
-    rows = c.fetchall()
-    conn.close()
-    return jsonify(rows)
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/ping', methods=['POST'])
 def ping():
@@ -36,11 +32,18 @@ def ping():
     except Exception as e:
         log_ping_result(ip, 'error', None)
         return jsonify({'ip': ip, 'status': 'error', 'message': str(e)})
-    
+
+@app.route('/log', methods=['GET'])
+def get_log():
+    conn = sqlite3.connect('ping_log.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM logs")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify(rows)
 
 def scheduled_ping():
-    devices = ['192.168.1.217', '192.168.1.214', '192.168.1.254'] # find ip i want to monitor
-
+    devices = ['8.8.8.8', '8.8.4.4']
     for ip in devices:
         try:
             rtt = ping3.ping(ip)
@@ -50,11 +53,20 @@ def scheduled_ping():
                 log_ping_result(ip, 'offline', None)
         except Exception as e:
             log_ping_result(ip, 'error', None)
+            print(f"Error pinging {ip}: {e}")
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(scheduled_ping, 'interval', minutes=.1)
+executors = {
+    'default': ThreadPoolExecutor(10),
+    'processpool': ProcessPoolExecutor(3)
+}
+job_defaults = {
+    'coalesce': False,
+    'max_instances': 1
+}
+
+scheduler = BackgroundScheduler(executors=executors, job_defaults=job_defaults)
+scheduler.add_job(scheduled_ping, 'interval', minutes=5, misfire_grace_time=300)
 scheduler.start()
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Network Monitoring Charts</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Network Monitoring Logs</h1>
+    <table id="logsTable" border="1">
+        <thead>
+            <tr>
+                <th>IP Address</th>
+                <th>Status</th>
+                <th>RTT (ms)</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <h1>Network Monitoring Charts</h1>
+    <canvas id="rttChart"></canvas>
+
+    <script>
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/log');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok ' + response.statusText);
+                }
+                const logs = await response.json();
+                const tableBody = document.getElementById('logsTable').getElementsByTagName('tbody')[0];
+                logs.forEach(log => {
+                    const row = tableBody.insertRow();
+                    row.insertCell(0).textContent = log[0];  // IP Address
+                    row.insertCell(1).textContent = log[1];  // Status
+                    row.insertCell(2).textContent = log[2] ? log[2].toFixed(2) : 'N/A';  // RTT
+                    row.insertCell(3).textContent = log[3];  // Timestamp
+                });
+                return logs;
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+            }
+        }
+
+        function createChart(logs) {
+            const ctx = document.getElementById('rttChart').getContext('2d');
+            const data = logs.map(log => ({x: new Date(log[3]), y: log[2]}));
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'RTT Over Time',
+                        data: data,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'minute'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        fetchLogs().then(logs => createChart(logs));
+    </script>
+</body>
+</html>
